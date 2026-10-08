@@ -119,7 +119,7 @@ func buildImportCopyPlan(sourceDir, targetDir string, manifest []importManifestF
 		required bool
 	}{
 		{rel: "profile.toml", required: true},
-		{rel: "README.md", required: true},
+		{rel: "README.md"},
 		{rel: filepath.Join("manifests", "files.toml"), required: true},
 		{rel: filepath.Join("manifests", "ignored.toml")},
 		{rel: filepath.Join("manifests", "environment.toml")},

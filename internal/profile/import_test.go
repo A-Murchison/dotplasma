@@ -24,7 +24,6 @@ func TestImportProfileCopiesValidatedProfile(t *testing.T) {
 	}
 	for _, rel := range []string{
 		"profile.toml",
-		"README.md",
 		filepath.Join("manifests", "files.toml"),
 		filepath.Join("manifests", "privacy.md"),
 		filepath.Join("files", "config", "kdeglobals"),
@@ -32,6 +31,23 @@ func TestImportProfileCopiesValidatedProfile(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(result.ProfileDir, rel)); err != nil {
 			t.Fatalf("expected imported %s: %s", rel, err.Error())
 		}
+	}
+}
+
+func TestImportProfileCopiesExistingReadme(t *testing.T) {
+	t.Parallel()
+
+	sourceProfile := savedImportSource(t)
+	writeFile(t, filepath.Join(sourceProfile, "README.md"), "# Imported notes\n")
+	out := t.TempDir()
+
+	result, err := ImportProfile(context.Background(), ImportOptions{SourceDir: sourceProfile, Profile: "friend", Out: out})
+	if err != nil {
+		t.Fatalf("ImportProfile returned error: %s", err.Error())
+	}
+	readme := readFile(t, filepath.Join(result.ProfileDir, "README.md"))
+	if readme != "# Imported notes\n" {
+		t.Fatalf("README.md = %q, want imported notes", readme)
 	}
 }
 

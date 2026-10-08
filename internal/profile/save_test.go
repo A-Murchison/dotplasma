@@ -46,7 +46,6 @@ func TestSaveCreatesProfileFiles(t *testing.T) {
 
 	wantFiles := []string{
 		"profile.toml",
-		"README.md",
 		filepath.Join("manifests", "files.toml"),
 		filepath.Join("manifests", "ignored.toml"),
 		filepath.Join("manifests", "environment.toml"),
@@ -63,6 +62,9 @@ func TestSaveCreatesProfileFiles(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected saved file %s: %s", path, err.Error())
 		}
+	}
+	if _, err := os.Stat(filepath.Join(result.ProfileDir, "README.md")); !os.IsNotExist(err) {
+		t.Fatalf("README.md should not be generated; stat error = %v", err)
 	}
 
 	plasmaShellConfig := readFile(t, filepath.Join(result.ProfileDir, "files", "config", "plasmashellrc"))
@@ -133,6 +135,32 @@ func TestSaveSecondRunIsStable(t *testing.T) {
 	profileMetadata := readFile(t, filepath.Join(result.ProfileDir, "profile.toml"))
 	if !strings.Contains(profileMetadata, `saved_at = "2026-01-02T03:04:05Z"`) {
 		t.Fatalf("saved_at was not preserved: %q", profileMetadata)
+	}
+}
+
+func TestSaveDoesNotDeleteExistingReadme(t *testing.T) {
+	t.Parallel()
+
+	configRoot := t.TempDir()
+	out := t.TempDir()
+	profileDir := filepath.Join(out, "profiles", "work")
+	readmePath := filepath.Join(profileDir, "README.md")
+	writeFile(t, readmePath, "# Personal notes\n")
+	writeFile(t, filepath.Join(configRoot, "kdeglobals"), "[General]\nColorScheme=BreezeDark\n")
+
+	_, err := Save(context.Background(), SaveOptions{
+		Profile: "work",
+		Out:     out,
+		Roots:   paths.LiveRoots{Config: configRoot, LocalShare: t.TempDir()},
+		Now:     fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("Save returned error: %s", err.Error())
+	}
+
+	readme := readFile(t, readmePath)
+	if readme != "# Personal notes\n" {
+		t.Fatalf("README.md = %q, want preserved personal notes", readme)
 	}
 }
 

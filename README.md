@@ -84,6 +84,18 @@ dotplasma diff main
 dotplasma apply main --dry-run
 ```
 
+## When are backups created?
+
+`dotplasma` creates `backups/<profile>/<timestamp>/` only when you run `dotplasma apply <profile>` and it is about to overwrite an existing tracked live file.
+
+By default, backups live under:
+
+```text
+${XDG_CONFIG_HOME:-~/.config}/dotplasma/backups/
+```
+
+`dotplasma` does not upload or sync this folder. If you put your output directory inside a cloud-synced folder, your cloud tool may sync it.
+
 ## What gets captured?
 
 `dotplasma` tracks an allowlisted set of KDE Plasma configuration files, including files related to panels, widgets, desktop layout, shortcuts, Plasma Shell, KWin, and display/layout state where supported.
@@ -236,14 +248,13 @@ dotplasma --help
 
 ## Output layout
 
-A saved profile is stored as plain files:
+Profiles and pre-restore backups are stored as plain files:
 
 ```text
 dotplasma-backups/
   profiles/
     main/
       profile.toml
-      README.md
       files/
         config/
         local-share/
