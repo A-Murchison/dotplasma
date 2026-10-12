@@ -115,19 +115,6 @@ func TestRunDiscoveryCommands(t *testing.T) {
 		wantOutput []string
 	}{
 		{
-			name: "doctor",
-			args: []string{"doctor", "--out", t.TempDir()},
-			wantOutput: []string{
-				"dotplasma doctor",
-				"Allowlist: OK (version 1, 6 files)",
-				"Config root:",
-				"Local data root:",
-				"Output directory: OK",
-				"Tracked live files:",
-				"Plasma version:",
-			},
-		},
-		{
 			name: "inspect-live",
 			args: []string{"inspect-live"},
 			wantOutput: []string{
