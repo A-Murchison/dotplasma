@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -32,121 +33,11 @@ jobs:
       - name: Test
         run: go test -race -count=1 -timeout 60s ./...
 
-      - name: Install RPM build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm
-
-      - name: Build release archives and packages
-        shell: bash
+      - name: Build and upload release assets
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          distribution: goreleaser
+          version: v2.18.3
+          args: release --clean
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-
-          version="${RELEASE_TAG}"
-          package_version="${version#v}"
-          package_version="${package_version//-/_}"
-          mkdir -p dist build
-
-          targets=(
-            "linux amd64"
-            "linux arm64"
-            "darwin amd64"
-            "darwin arm64"
-            "windows amd64"
-            "windows arm64"
-          )
-
-          for target in "${targets[@]}"; do
-            read -r goos goarch <<<"${target}"
-            name="dotplasma_${version}_${goos}_${goarch}"
-            out_dir="build/${name}"
-            mkdir -p "${out_dir}"
-
-            binary="dotplasma"
-            if [[ "${goos}" == "windows" ]]; then
-              binary="dotplasma.exe"
-            fi
-
-            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-              go build -trimpath -ldflags "-s -w" -o "${out_dir}/${binary}" ./cmd/dotplasma
-
-            cp README.md "${out_dir}/"
-            if [[ -f LICENSE ]]; then
-              cp LICENSE "${out_dir}/"
-            fi
-
-            if [[ "${goos}" == "windows" ]]; then
-              (cd build && zip -qr "../dist/${name}.zip" "${name}")
-            else
-              tar -C build -czf "dist/${name}.tar.gz" "${name}"
-            fi
-          done
-
-          rpmbuild_topdir="${PWD}/build/rpmbuild"
-          mkdir -p "${rpmbuild_topdir}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-
-          rpm_targets=(
-            "amd64 x86_64"
-            "arm64 aarch64"
-          )
-
-          for target in "${rpm_targets[@]}"; do
-            read -r goarch rpm_arch <<<"${target}"
-            rpm_binary="${rpmbuild_topdir}/SOURCES/dotplasma-linux-${rpm_arch}"
-            spec_file="${rpmbuild_topdir}/SPECS/dotplasma-${rpm_arch}.spec"
-
-            CGO_ENABLED=0 GOOS=linux GOARCH="${goarch}" \
-              go build -trimpath -ldflags "-s -w" -o "${rpm_binary}" ./cmd/dotplasma
-
-            cat > "${spec_file}" <<EOF
-          Name: dotplasma
-          Version: ${package_version}
-          Release: 1
-          Summary: KDE Plasma configuration backup, diff, and restore CLI
-          License: MIT
-          URL: https://github.com/A-Murchison/dot-plasma
-          BuildArch: ${rpm_arch}
-          AutoReqProv: no
-          %global debug_package %{nil}
-          %global __strip /bin/true
-
-          %description
-          dotplasma saves, compares, imports, and restores KDE Plasma desktop
-          configuration profiles as plain files that users can review and manage.
-
-          %prep
-
-          %build
-
-          %install
-          mkdir -p %{buildroot}/usr/bin
-          install -m 0755 %{_sourcedir}/dotplasma-linux-${rpm_arch} %{buildroot}/usr/bin/dotplasma
-          mkdir -p %{buildroot}/usr/share/doc/dotplasma
-          install -m 0644 ${PWD}/README.md %{buildroot}/usr/share/doc/dotplasma/README.md
-          mkdir -p %{buildroot}/usr/share/licenses/dotplasma
-          install -m 0644 ${PWD}/LICENSE %{buildroot}/usr/share/licenses/dotplasma/LICENSE
-
-          %files
-          /usr/bin/dotplasma
-          %doc /usr/share/doc/dotplasma/README.md
-          %license /usr/share/licenses/dotplasma/LICENSE
-
-          %changelog
-          * $(date -u '+%a %b %d %Y') dotplasma maintainers <noreply@github.com> - ${package_version}-1
-          - Release ${version}
-          EOF
-
-            rpmbuild --define "_topdir ${rpmbuild_topdir}" --target "${rpm_arch}" -bb "${spec_file}"
-          done
-
-          find "${rpmbuild_topdir}/RPMS" -type f -name '*.rpm' -exec cp {} dist/ \;
-          (cd dist && sha256sum * > checksums.txt)
-
-      - name: Upload release assets
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "${RELEASE_TAG}" dist/* --clobber
+          GITHUB_TOKEN: ${{ github.token }}

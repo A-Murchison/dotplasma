@@ -25,10 +25,10 @@ go run ./cmd/dotplasma --help
 
 ### Fedora, RHEL, CentOS, and other RPM-based systems
 
-Releases include RPM packages for `x86_64` and `aarch64`. Download the RPM for your architecture from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page, then install it with `dnf`:
+Releases include RPM packages for supported Linux architectures. Download the RPM for your architecture from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page, then install it with `dnf`:
 
 ```sh
-sudo dnf install ./dotplasma-0.1.0-1.x86_64.rpm
+sudo dnf install ./dotplasma_0.1.0_linux_amd64.rpm
 dotplasma --help
 ```
 
@@ -36,17 +36,17 @@ You can also install an RPM directly from a release URL:
 
 ```sh
 sudo dnf install \
-  https://github.com/A-Murchison/dot-plasma/releases/download/v0.1.0/dotplasma-0.1.0-1.x86_64.rpm
+  https://github.com/A-Murchison/dot-plasma/releases/download/v0.1.0/dotplasma_0.1.0_linux_amd64.rpm
 ```
 
-Replace `v0.1.0` and the package filename with the release and architecture you want, such as `dotplasma-0.1.0-1.aarch64.rpm` on 64-bit ARM.
+Replace `v0.1.0` and the package filename with the release and architecture you want, such as `dotplasma_0.1.0_linux_arm64.rpm` on 64-bit ARM.
 
 ### Debian and Ubuntu
 
-For releases that include Debian packages, download the `.deb` package for your architecture from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page, then install it with `apt`:
+Releases include Debian packages for supported Linux architectures. Download the `.deb` package for your architecture from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page, then install it with `apt`:
 
 ```sh
-sudo apt install ./dotplasma_0.1.0_amd64.deb
+sudo apt install ./dotplasma_0.1.0_linux_amd64.deb
 dotplasma --help
 ```
 

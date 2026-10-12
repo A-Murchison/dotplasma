@@ -5,6 +5,7 @@
       "release-type": "go",
       "package-name": "dotplasma",
       "include-v-in-tag": true,
+      "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md"
     }
   }
