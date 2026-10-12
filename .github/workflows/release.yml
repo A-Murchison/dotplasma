@@ -32,7 +32,12 @@ jobs:
       - name: Test
         run: go test -race -count=1 -timeout 60s ./...
 
-      - name: Build release archives
+      - name: Install RPM build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Build release archives and packages
         shell: bash
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -40,6 +45,8 @@ jobs:
           set -euo pipefail
 
           version="${RELEASE_TAG}"
+          package_version="${version#v}"
+          package_version="${package_version//-/_}"
           mkdir -p dist build
 
           targets=(
@@ -77,6 +84,64 @@ jobs:
             fi
           done
 
+          rpmbuild_topdir="${PWD}/build/rpmbuild"
+          mkdir -p "${rpmbuild_topdir}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+          rpm_targets=(
+            "amd64 x86_64"
+            "arm64 aarch64"
+          )
+
+          for target in "${rpm_targets[@]}"; do
+            read -r goarch rpm_arch <<<"${target}"
+            rpm_binary="${rpmbuild_topdir}/SOURCES/dotplasma-linux-${rpm_arch}"
+            spec_file="${rpmbuild_topdir}/SPECS/dotplasma-${rpm_arch}.spec"
+
+            CGO_ENABLED=0 GOOS=linux GOARCH="${goarch}" \
+              go build -trimpath -ldflags "-s -w" -o "${rpm_binary}" ./cmd/dotplasma
+
+            cat > "${spec_file}" <<EOF
+          Name: dotplasma
+          Version: ${package_version}
+          Release: 1
+          Summary: KDE Plasma configuration backup, diff, and restore CLI
+          License: MIT
+          URL: https://github.com/A-Murchison/dot-plasma
+          BuildArch: ${rpm_arch}
+          AutoReqProv: no
+          %global debug_package %{nil}
+          %global __strip /bin/true
+
+          %description
+          dotplasma saves, compares, imports, and restores KDE Plasma desktop
+          configuration profiles as plain files that users can review and manage.
+
+          %prep
+
+          %build
+
+          %install
+          mkdir -p %{buildroot}/usr/bin
+          install -m 0755 %{_sourcedir}/dotplasma-linux-${rpm_arch} %{buildroot}/usr/bin/dotplasma
+          mkdir -p %{buildroot}/usr/share/doc/dotplasma
+          install -m 0644 ${PWD}/README.md %{buildroot}/usr/share/doc/dotplasma/README.md
+          mkdir -p %{buildroot}/usr/share/licenses/dotplasma
+          install -m 0644 ${PWD}/LICENSE %{buildroot}/usr/share/licenses/dotplasma/LICENSE
+
+          %files
+          /usr/bin/dotplasma
+          %doc /usr/share/doc/dotplasma/README.md
+          %license /usr/share/licenses/dotplasma/LICENSE
+
+          %changelog
+          * $(date -u '+%a %b %d %Y') dotplasma maintainers <noreply@github.com> - ${package_version}-1
+          - Release ${version}
+          EOF
+
+            rpmbuild --define "_topdir ${rpmbuild_topdir}" --target "${rpm_arch}" -bb "${spec_file}"
+          done
+
+          find "${rpmbuild_topdir}/RPMS" -type f -name '*.rpm' -exec cp {} dist/ \;
           (cd dist && sha256sum * > checksums.txt)
 
       - name: Upload release assets
