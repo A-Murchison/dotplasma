@@ -1,4 +1,4 @@
-# dotplasma
+# dotplasma — KDE Plasma config backup, diff, and restore CLI
 
 [![Release](https://img.shields.io/github/v/release/A-Murchison/dot-plasma?sort=semver)](https://github.com/A-Murchison/dot-plasma/releases)
 [![Documentation](https://img.shields.io/badge/docs-usage%20reference-blue)](docs/usage.md)
