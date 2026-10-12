@@ -1,36 +1,87 @@
 # dotplasma — KDE Plasma config backup, diff, and restore CLI
 
-Save, compare, and restore KDE Plasma desktop configuration as plain files.
-
-`dotplasma` is an open-source CLI for people who want their KDE Plasma setup to be inspectable, backed up, and easy to move between machines. It snapshots an allowlisted set of Plasma desktop configuration files from your home directory into regular folders that you can review, copy, or commit to Git yourself. 
-
-
-<img width="960" height="540" alt="dotplasmademo" src="https://github.com/user-attachments/assets/7e330581-bcd3-4ced-ac8e-04b0b2206565" />
+[![Release](https://img.shields.io/github/v/release/A-Murchison/dot-plasma?sort=semver)](https://github.com/A-Murchison/dot-plasma/releases)
+[![Documentation](https://img.shields.io/badge/docs-usage%20reference-blue)](docs/usage.md)
 
 
-## Good fit
+`dotplasma` is a CLI for saving, comparing, importing, and restoring KDE Plasma desktop configuration as plain files. It is designed for Plasma users who want an inspectable backup of panels, widgets, shortcuts, desktop layout, KWin settings, and related config before making changes or moving a setup between machines.
 
-`dotplasma` is most useful when you want to:
-
-- keep a known-good Plasma layout before experimenting with panels, widgets, shortcuts, or desktop settings;
-- review what changed in Plasma's config files before committing dotfiles;
-- back up and restore Plasma configuration on the same machine;
-- move a profile between similar Plasma installations while reviewing it before applying.
-- backup to git
-  
-`dotplasma` focuses on that workflow: snapshot, diff, review, and only then restore if you choose to.
+<img width="960" height="540" alt="dotplasma demo" src="https://github.com/user-attachments/assets/7e330581-bcd3-4ced-ac8e-04b0b2206565" />
 
 ## Features
 
-- **Save Plasma profiles** into `profiles/<name>/` as normal files.
-- **Review changes** between a saved profile and your live desktop.
-- **Import profiles safely** from another machine without applying them.
-- **Restore cautiously** with `--dry-run` support and automatic pre-restore backups.
-- **Git-friendly output** that you control; no automatic commits or remote sync.
-- **Conservative file scope** using an allowlist of known Plasma config files.
-- **No root and no network access** required.
+- **Profile snapshots:** Save your current Plasma configuration into named profiles under `profiles/<name>/`.
+- **Readable diffs:** Compare a saved profile with your live desktop before deciding what to keep.
+- **Safe imports:** Import a profile from another machine without applying it immediately.
+- **Cautious restores:** Preview writes with `--dry-run`; real restores create a backup first.
+- **Git-friendly output:** Profiles are normal files that you can review, copy, commit, or ignore yourself.
+- **Conservative scope:** Only an [allow list](docs/usage.md#what-gets-captured) set of known Plasma configuration files is captured.
+- **No root, no network:** `dotplasma` works in your user account and does not push or sync anything.
 
-## Commands
+## Diff Demo
+
+
+
+<img width="982" height="693" alt="dotplasma diff output" src="https://github.com/user-attachments/assets/49b5bb1c-dc49-4b61-a544-fb2bb1e0d14e" />
+
+## Installation
+
+### Install with Go
+
+```sh
+go install github.com/A-Murchison/dot-plasma/cmd/dotplasma@latest
+dotplasma --help
+```
+
+### Download a release
+
+Linux `.deb` and `.rpm` packages are available from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page. Release archives are also available for Linux, macOS, and Windows.
+
+### Build from source
+
+```sh
+git clone https://github.com/A-Murchison/dot-plasma.git
+cd dot-plasma
+go build -o ~/.local/bin/dotplasma ./cmd/dotplasma
+```
+
+You can also run from a checkout without installing:
+
+```sh
+go run ./cmd/dotplasma --help
+```
+
+## Usage
+
+By default, `dotplasma` stores profiles and restore backups under:
+
+```text
+${XDG_CONFIG_HOME:-~/.config}/dotplasma/
+```
+
+Use `--out DIR` with supported commands if you want to keep profiles somewhere else.
+
+```sh
+# Check that dotplasma can see your Plasma files and output directory.
+dotplasma doctor
+
+# Show which tracked Plasma config files exist on this machine.
+dotplasma inspect-live
+
+# Save your current desktop as a profile named "main".
+dotplasma save main
+
+# See what changed since that snapshot.
+dotplasma diff main
+
+# Preview a restore without writing anything.
+dotplasma apply main --dry-run
+
+# Apply the profile and optionally reload Plasma Shell.
+dotplasma apply main --reload plasmashell
+```
+
+## Command overview
 
 ```text
 dotplasma [--config PATH] doctor [--out DIR]
@@ -43,233 +94,6 @@ dotplasma [--config PATH] apply <profile> [--out DIR] [--dry-run] [--reload none
 dotplasma [--config PATH] version
 ```
 
-<img width="982" height="693" alt="dotplasma-diff" src="https://github.com/user-attachments/assets/49b5bb1c-dc49-4b61-a544-fb2bb1e0d14e" />
-
-
-Useful notes:
-
-- `diff` exits `0` when there are no differences, `1` when differences are found, and `2` for usage or runtime errors.
-- `list` shows saved profile names, captured Plasma version when available, distro when available, and saved time.
-- `apply` restores only manifest-listed files that are also present in the current allowlist.
-- `apply` refuses old or incomplete Plasma Shell layout snapshots that are missing required screen-binding data.
-- `--format json` for `diff` is reserved for future support; use the default text output today.
-- `diff` shows a changed-files summary by default. Add `--verbose` to show per-setting values in vertical detail blocks.
-- `diff --color auto` colorizes statuses only when writing to a terminal. Use `always` or `never` to override it.
-
-
-## Quick start
-
-By default, `dotplasma` stores profiles and restore backups under:
-
-```text
-${XDG_CONFIG_HOME:-~/.config}/dotplasma/
-```
-
-You can also choose a separate directory with `--out`, which is useful if you want to keep profiles in a Git repository.
-
-```sh
-# Check that dotplasma can see your Plasma files and output directory.
-dotplasma doctor 
-
-# Show which known Plasma config files exist on this machine.
-dotplasma inspect-live
-
-# Save your current desktop as a profile named "main".
-dotplasma save main 
-
-# See what changed since that snapshot.
-dotplasma diff main 
-
-# Preview a restore without writing anything.
-dotplasma apply main --dry-run
-```
-
-## When are backups created?
-
-`dotplasma` creates `backups/<profile>/<timestamp>/` only when you run `dotplasma apply <profile>` and it is about to overwrite an existing tracked live file.
-
-By default, backups live under:
-
-```text
-${XDG_CONFIG_HOME:-~/.config}/dotplasma/backups/
-```
-
-`dotplasma` does not upload or sync this folder. If you put your output directory inside a cloud-synced folder, your cloud tool may sync it.
-
-## What gets captured?
-
-`dotplasma` tracks an allowlisted set of KDE Plasma configuration files, including files related to panels, widgets, desktop layout, shortcuts, Plasma Shell, KWin, and display/layout state where supported.
-
-Run this to see exactly which tracked files exist on your machine:
-
-```sh
-dotplasma inspect-live
-```
-
-## Configuration
-
-`dotplasma` reads this config file by default:
-
-```text
-${XDG_CONFIG_HOME:-~/.config}/dotplasma/config.toml
-```
-
-Supported setting:
-
-```toml
-# Root directory containing profiles/ and backups/.
-output_dir = "/home/adam/dotplasma-backups"
-```
-
-`--out DIR` overrides the config file for a single command. `--config PATH` reads a different config file.
-
-
-## Common workflows
-
-### Keep Plasma config in Git
-
-```sh
-dotplasma save main --out ~/src/plasma-profiles
-cd ~/src/plasma-profiles
-git status
-git diff
-git add profiles/main
-git commit -m "chore: update plasma profile"
-```
-
-`dotplasma` does not run Git commands for you. The saved files are yours to inspect, edit, commit, encrypt, or ignore.
-
-### Preview before writing
-
-Writing commands support `--dry-run`:
-
-```sh
-dotplasma save main --out ~/dotplasma-backups --dry-run
-dotplasma import ~/Downloads/plasma-profile laptop --out ~/dotplasma-backups --dry-run
-dotplasma apply main --out ~/dotplasma-backups --dry-run
-```
-
-### Move a profile to another machine
-
-On the source machine:
-
-```sh
-dotplasma save laptop --out ~/dotplasma-backups
-```
-
-Copy `~/dotplasma-backups/profiles/laptop` to the other machine, then import it:
-
-```sh
-dotplasma import ~/Downloads/laptop laptop --out ~/dotplasma-backups
-```
-
-Review it before applying:
-
-```sh
-dotplasma diff laptop --out ~/dotplasma-backups
-dotplasma diff laptop --out ~/dotplasma-backups --verbose
-dotplasma apply laptop --out ~/dotplasma-backups --dry-run
-```
-
-Apply only after you are comfortable with the planned changes:
-
-```sh
-dotplasma apply laptop --out ~/dotplasma-backups
-```
-
-Existing tracked live files that change are backed up first under `backups/<profile>/<timestamp>/`.
-
-## Plasma Shell reloads
-
-Some panel, widget, wallpaper, and desktop layout changes may not appear until Plasma Shell is restarted. `dotplasma` never does this automatically.
-
-If you explicitly request it, `dotplasma` can stop `plasmashell`, apply the profile while it is stopped, and start it again afterward:
-
-```sh
-dotplasma apply main --out ~/dotplasma-backups --reload plasmashell
-```
-
-During this reload, panels, desktop widgets, wallpaper, and command bars can briefly disappear. To preview the plan without stopping Plasma Shell or writing files:
-
-```sh
-dotplasma apply main --out ~/dotplasma-backups --reload plasmashell --dry-run
-```
-
-## Install
-
-### Go install
-
-If you have Go installed, this is the simplest option:
-
-```sh
-go install github.com/A-Murchison/dot-plasma/cmd/dotplasma@latest
-dotplasma --help
-```
-
-### Manual install
-
-From a local checkout:
-
-```sh
-go build -o ~/.local/bin/dotplasma ./cmd/dotplasma
-# or run without installing
-go run ./cmd/dotplasma --help
-```
-
-
-### Fedora, RHEL, CentOS, and other RPM-based systems
-
-For releases that include RPM packages, download the RPM for your architecture from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page, then install it with `dnf`:
-
-```sh
-sudo dnf install ./dotplasma-0.1.0-1.x86_64.rpm
-dotplasma --help
-```
-
-You can also install an RPM directly from a release URL:
-
-```sh
-sudo dnf install \
-  https://github.com/A-Murchison/dot-plasma/releases/download/v0.1.0/dotplasma-0.1.0-1.x86_64.rpm
-```
-
-Replace `v0.1.0` and the package filename with the release and architecture you want.
-
-### Debian and Ubuntu
-
-For releases that include Debian packages, download the `.deb` package for your architecture from the [GitHub Releases](https://github.com/A-Murchison/dot-plasma/releases) page, then install it with `apt`:
-
-```sh
-sudo apt install ./dotplasma_0.1.0_amd64.deb
-dotplasma --help
-```
-
-
-
-## Output layout
-
-Profiles and pre-restore backups are stored as plain files:
-
-```text
-dotplasma-backups/
-  profiles/
-    main/
-      profile.toml
-      files/
-        config/
-        local-share/
-      manifests/
-  backups/
-    main/
-      20250102T030405Z/
-        files/
-          config/
-          local-share/
-```
-
-You can inspect, copy, back up, or commit this directory yourself.
-
-
 ## Safety model
 
 `dotplasma` is intentionally conservative:
@@ -277,24 +101,25 @@ You can inspect, copy, back up, or commit this directory yourself.
 - It does not require root.
 - It does not access the network.
 - It does not make Git commits or push anywhere.
-- It only tracks a known allowlist of Plasma files.
+- It only tracks known Plasma files from its allowlist.
 - Writing commands support `--dry-run`.
 - Restore creates backups before updating tracked live files.
 - Plasma Shell reload is opt-in.
 
-
 > [!WARNING]
 > Treat saved profiles as private. Plasma config can include local paths, widget settings, wallpaper paths, monitor layout details, and other machine-specific data. Review files before sharing or publishing them.
 
+## Documentation
+
+- [Usage and reference](docs/usage.md) — install details, commands, configuration, backups, captured files, workflows, Plasma Shell reloads, output layout, and safety notes.
+- [Contributing](CONTRIBUTING.md) — development commands and project guidelines.
+- [Changelog](CHANGELOG.md) — release history.
 
 ## Contributing
 
-Issues, bug reports, real-world Plasma edge cases, and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development commands and project guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development commands and project guidelines.
 
----
+## Credits
 
-Shout out to https://github.com/EliverLara/Nordic for the nordic theme in the gifs.
-
-Shout out to https://github.com/Prayag2/konsave for the inspiration
-
-KDE Plasma backup, Plasma desktop config backup, KDE dotfiles, Plasma dotfiles, KDE settings migration, Plasma panel layout backup, KWin configuration backup, `plasmashellrc`, `plasma-org.kde.plasma.desktop-appletsrc`, and `konsave` alternative.
+- Thanks to [EliverLara/Nordic](https://github.com/EliverLara/Nordic) for the Nordic theme shown in the demos.
+- Thanks to [Prayag2/konsave](https://github.com/Prayag2/konsave) for inspiration.

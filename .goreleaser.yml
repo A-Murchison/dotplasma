@@ -1,0 +1,58 @@
+version: 2
+
+project_name: dotplasma
+
+builds:
+  - id: dotplasma
+    main: ./cmd/dotplasma
+    binary: dotplasma
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - id: archives
+    ids:
+      - dotplasma
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+
+nfpms:
+  - id: packages
+    package_name: dotplasma
+    ids:
+      - dotplasma
+    vendor: A-Murchison
+    homepage: https://github.com/A-Murchison/dot-plasma
+    maintainer: dotplasma maintainers <noreply@github.com>
+    description: KDE Plasma configuration backup, diff, and restore CLI
+    license: MIT
+    bindir: /usr/bin
+    formats:
+      - deb
+      - rpm
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  mode: append
