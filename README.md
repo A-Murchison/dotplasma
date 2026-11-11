@@ -59,7 +59,9 @@ By default, `dotplasma` stores profiles and restore backups under:
 ${XDG_CONFIG_HOME:-~/.config}/dotplasma/
 ```
 
-Use `--out DIR` with supported commands if you want to keep profiles somewhere else.
+Use `--out DIR` to store profiles elsewhere. Live config is read from `XDG_CONFIG_HOME` when it is an absolute path; otherwise it uses `~/.config`.
+
+If you use a custom XDG directory, check `inspect-live` and `apply --dry-run` when upgrading: older versions always used `~/.config`. See the [XDG migration note](docs/usage.md#live-file-locations).
 
 ```sh
 # Check that dotplasma can see your Plasma files and output directory.

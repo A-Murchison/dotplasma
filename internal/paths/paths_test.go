@@ -8,6 +8,33 @@ import (
 	"github.com/A-Murchison/dot-plasma/internal/allowlist"
 )
 
+func TestDefaultLiveRootsXDG(t *testing.T) {
+	home := t.TempDir()
+	config := filepath.Join(home, "custom-config")
+	data := filepath.Join(home, "custom-data")
+	tests := []struct {
+		name, config, data, wantConfig, wantData string
+	}{
+		{"custom", config, data, config, data},
+		{"empty", "", "", filepath.Join(home, ".config"), filepath.Join(home, ".local", "share")},
+		{"relative", "relative", "relative", filepath.Join(home, ".config"), filepath.Join(home, ".local", "share")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_CONFIG_HOME", tt.config)
+			t.Setenv("XDG_DATA_HOME", tt.data)
+			got, err := DefaultLiveRoots()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Config != tt.wantConfig || got.LocalShare != tt.wantData {
+				t.Fatalf("DefaultLiveRoots() = %+v, want %q and %q", got, tt.wantConfig, tt.wantData)
+			}
+		})
+	}
+}
+
 func TestJoin(t *testing.T) {
 	t.Parallel()
 

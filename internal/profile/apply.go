@@ -89,6 +89,28 @@ func Apply(ctx context.Context, opts ApplyOptions) (ApplyResult, error) {
 	result := ApplyResult{Profile: opts.Profile, ProfileDir: profileDir, BackupDir: backupDir}
 	result.Warnings = append(result.Warnings, applyVersionWarnings(ctx, profileDir)...)
 
+	// Validate every entry before making any live changes.
+	seen := make(map[string]bool, len(manifest))
+	preflight := opts
+	preflight.DryRun = true
+	for _, item := range manifest {
+		if err := ctx.Err(); err != nil {
+			return ApplyResult{}, fmt.Errorf("preflight apply: %w", err)
+		}
+		key := item.Root + ":" + item.Path
+		if seen[key] {
+			return ApplyResult{}, fmt.Errorf("duplicate profile file %s", key)
+		}
+		seen[key] = true
+		file, ok := allowlisted[key]
+		if !ok {
+			return ApplyResult{}, fmt.Errorf("profile file %s/%s is not in the current allowlist", item.Root, item.Path)
+		}
+		if _, err := applyFile(preflight, profileDir, backupDir, file, item); err != nil {
+			return ApplyResult{}, fmt.Errorf("preflight apply: %w", err)
+		}
+	}
+
 	for _, item := range manifest {
 		if err := ctx.Err(); err != nil {
 			return ApplyResult{}, fmt.Errorf("apply profile: %w", err)

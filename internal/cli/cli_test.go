@@ -352,7 +352,9 @@ func TestRunImportDryRun(t *testing.T) {
 }
 
 func TestRunUsesConfigOutputDirectory(t *testing.T) {
-	t.Parallel()
+	configRoot := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	writeCLITestFile(t, filepath.Join(configRoot, "kdeglobals"), "[General]\nColorScheme=Breeze\n")
 
 	out := t.TempDir()
 	configPath := filepath.Join(t.TempDir(), "config.toml")
@@ -539,7 +541,9 @@ func TestResolveOutputDirDefaultsToUserConfigDir(t *testing.T) {
 }
 
 func TestRunCommands(t *testing.T) {
-	t.Parallel()
+	configRoot := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	writeCLITestFile(t, filepath.Join(configRoot, "kdeglobals"), "[General]\nColorScheme=Breeze\n")
 
 	tests := []struct {
 		name       string
@@ -576,7 +580,6 @@ func TestRunCommands(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer

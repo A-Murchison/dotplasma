@@ -187,6 +187,56 @@ func TestSaveDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestSaveFailurePreservesPreviousProfile(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=old\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots}); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(out, "profiles", "work", "manifests", "files.toml")
+	before := readFile(t, manifest)
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=new\n")
+	writeFile(t, filepath.Join(root, "kwinrc"), "[invalid\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots}); err == nil {
+		t.Fatal("Save() succeeded with invalid live file")
+	}
+	if got := readFile(t, manifest); got != before {
+		t.Fatalf("manifest changed after failed save: got %q want %q", got, before)
+	}
+	if got := readFile(t, filepath.Join(out, "profiles", "work", "files", "config", "kdeglobals")); got != "[General]\nvalue=old\n" {
+		t.Fatalf("saved data changed after failure: %q", got)
+	}
+}
+
+func TestSaveReportsProfileSymlink(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=saved\n")
+	profileDir := filepath.Join(out, "profiles", "work")
+	writeFile(t, filepath.Join(profileDir, "notes.txt"), "notes")
+	link := filepath.Join(profileDir, "link")
+	if err := os.Symlink("notes.txt", link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: paths.LiveRoots{Config: root, LocalShare: t.TempDir()}})
+	if err == nil || !strings.Contains(err.Error(), "symlink "+link) {
+		t.Fatalf("Save() error = %v, want symlink and path", err)
+	}
+	if got := readFile(t, filepath.Join(profileDir, "notes.txt")); got != "notes" {
+		t.Fatalf("existing profile changed: %q", got)
+	}
+}
+
+func TestSaveRejectsEmptyCapture(t *testing.T) {
+	t.Parallel()
+	_, err := Save(context.Background(), SaveOptions{Profile: "work", Out: t.TempDir(), Roots: paths.LiveRoots{Config: t.TempDir(), LocalShare: t.TempDir()}})
+	if err == nil || !strings.Contains(err.Error(), "no tracked files") {
+		t.Fatalf("Save() error = %v, want empty capture error", err)
+	}
+}
+
 func TestSaveRejectsUnsafeProfileName(t *testing.T) {
 	t.Parallel()
 

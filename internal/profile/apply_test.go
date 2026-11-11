@@ -11,6 +11,28 @@ import (
 	"github.com/A-Murchison/dot-plasma/internal/paths"
 )
 
+func TestApplyPreflightRejectsCorruptLaterFile(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=saved\n")
+	writeFile(t, filepath.Join(root, "kwinrc"), "[General]\nvalue=saved\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=live\n")
+	writeFile(t, filepath.Join(out, "profiles", "work", "files", "config", "kwinrc"), "corrupt")
+	if _, err := Apply(context.Background(), ApplyOptions{Profile: "work", Out: out, Roots: roots}); err == nil {
+		t.Fatal("Apply() succeeded with corrupted later file")
+	}
+	if got := readFile(t, filepath.Join(root, "kdeglobals")); got != "[General]\nvalue=live\n" {
+		t.Fatalf("live file changed during preflight: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(out, "backups")); !os.IsNotExist(err) {
+		t.Fatalf("backup created during failed preflight: %v", err)
+	}
+}
+
 func TestApplyDryRunDoesNotWriteLiveFilesOrBackups(t *testing.T) {
 	t.Parallel()
 

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -39,7 +40,113 @@ type Action struct {
 	Target string
 }
 
+// Save stages a complete snapshot before replacing an existing profile.
 func Save(ctx context.Context, opts SaveOptions) (SaveResult, error) {
+	plan := opts
+	plan.DryRun = true
+	result, err := saveInto(ctx, plan)
+	if err != nil || opts.DryRun {
+		return result, err
+	}
+	parent := filepath.Dir(result.ProfileDir)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return SaveResult{}, fmt.Errorf("create profiles directory: %w", err)
+	}
+	work, err := os.MkdirTemp(parent, ".dotplasma-save-*")
+	if err != nil {
+		return SaveResult{}, fmt.Errorf("create staging directory: %w", err)
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.RemoveAll(work)
+		}
+	}()
+	staged := filepath.Join(work, "new")
+	old := filepath.Join(work, "previous")
+	exists := false
+	if _, err := os.Lstat(result.ProfileDir); err == nil {
+		exists = true
+		if err := copyProfile(result.ProfileDir, staged); err != nil {
+			return SaveResult{}, fmt.Errorf("stage existing profile: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return SaveResult{}, fmt.Errorf("inspect existing profile: %w", err)
+	}
+	// saveInto expects an output root containing profiles/<name>.
+	stageOut := filepath.Join(work, "output")
+	stageProfile := filepath.Join(stageOut, "profiles", opts.Profile)
+	if err := os.MkdirAll(filepath.Dir(stageProfile), 0o700); err != nil {
+		return SaveResult{}, fmt.Errorf("create staged profile directory: %w", err)
+	}
+	if exists {
+		if err := os.Rename(staged, stageProfile); err != nil {
+			return SaveResult{}, fmt.Errorf("prepare staged profile: %w", err)
+		}
+	}
+	stageOpts := opts
+	stageOpts.Out = stageOut
+	if _, err := saveInto(ctx, stageOpts); err != nil {
+		return SaveResult{}, fmt.Errorf("stage profile: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return SaveResult{}, fmt.Errorf("save profile: %w", err)
+	}
+	if exists {
+		if err := os.Rename(result.ProfileDir, old); err != nil {
+			return SaveResult{}, fmt.Errorf("preserve previous profile: %w", err)
+		}
+	}
+	if err := os.Rename(stageProfile, result.ProfileDir); err != nil {
+		if exists {
+			if restoreErr := os.Rename(old, result.ProfileDir); restoreErr != nil {
+				cleanup = false
+				return SaveResult{}, fmt.Errorf("commit profile: %w; previous profile remains at %s (restore failed: %w)", err, old, restoreErr)
+			}
+		}
+		return SaveResult{}, fmt.Errorf("commit profile: %w", err)
+	}
+	return result, nil
+}
+
+func copyProfile(source, target string) error {
+	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("walk %s: %w", path, walkErr)
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return fmt.Errorf("resolve %s: %w", path, err)
+		}
+		dest := filepath.Join(target, rel)
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("inspect %s: %w", path, err)
+		}
+		if entry.IsDir() {
+			if err := os.Mkdir(dest, info.Mode().Perm()); err != nil {
+				return fmt.Errorf("create %s: %w", dest, err)
+			}
+			return nil
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("profile contains a symlink %s; replace it with a regular file or directory before saving", path)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("cannot safely stage non-regular profile file %s", path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if err := os.WriteFile(dest, data, info.Mode().Perm()); err != nil {
+			return fmt.Errorf("copy %s: %w", path, err)
+		}
+		return nil
+	})
+}
+
+func saveInto(ctx context.Context, opts SaveOptions) (SaveResult, error) {
 	if err := validateProfileName(opts.Profile); err != nil {
 		return SaveResult{}, err
 	}
@@ -84,6 +191,9 @@ func Save(ctx context.Context, opts SaveOptions) (SaveResult, error) {
 		}
 	}
 
+	if len(manifestFiles) == 0 {
+		return SaveResult{}, fmt.Errorf("no tracked files found; run dotplasma inspect-live to check live paths")
+	}
 	metadataActions, err := saveMetadata(ctx, opts, profileDir, list, manifestFiles)
 	if err != nil {
 		return SaveResult{}, err
