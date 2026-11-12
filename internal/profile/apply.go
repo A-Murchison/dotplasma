@@ -3,6 +3,7 @@ package profile
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,17 +90,36 @@ func Apply(ctx context.Context, opts ApplyOptions) (ApplyResult, error) {
 	result := ApplyResult{Profile: opts.Profile, ProfileDir: profileDir, BackupDir: backupDir}
 	result.Warnings = append(result.Warnings, applyVersionWarnings(ctx, profileDir)...)
 
+	// Validate every entry before making any live changes.
+	seen := make(map[string]bool, len(manifest))
+	preflight := opts
+	preflight.DryRun = true
 	for _, item := range manifest {
 		if err := ctx.Err(); err != nil {
-			return ApplyResult{}, fmt.Errorf("apply profile: %w", err)
+			return ApplyResult{}, fmt.Errorf("preflight apply: %w", err)
 		}
-		file, ok := allowlisted[item.Root+":"+item.Path]
+		key := item.Root + ":" + item.Path
+		if seen[key] {
+			return ApplyResult{}, fmt.Errorf("duplicate profile file %s", key)
+		}
+		seen[key] = true
+		file, ok := allowlisted[key]
 		if !ok {
 			return ApplyResult{}, fmt.Errorf("profile file %s/%s is not in the current allowlist", item.Root, item.Path)
 		}
+		if _, err := applyFile(preflight, profileDir, backupDir, file, item); err != nil {
+			return ApplyResult{}, fmt.Errorf("preflight apply: %w", err)
+		}
+	}
+
+	for _, item := range manifest {
+		if err := ctx.Err(); err != nil {
+			return ApplyResult{}, errors.Join(fmt.Errorf("apply profile: %w", err), rollbackApply(result.Actions, profileDir, backupDir))
+		}
+		file := allowlisted[item.Root+":"+item.Path]
 		action, err := applyFile(opts, profileDir, backupDir, file, item)
 		if err != nil {
-			return ApplyResult{}, err
+			return ApplyResult{}, errors.Join(err, rollbackApply(result.Actions, profileDir, backupDir))
 		}
 		result.Actions = append(result.Actions, action)
 	}
@@ -167,9 +187,62 @@ func applyFile(opts ApplyOptions, profileDir, backupDir string, file allowlist.F
 		return Action{}, fmt.Errorf("create live directory %s: %w", filepath.Dir(livePath), err)
 	}
 	if err := os.WriteFile(livePath, savedData, 0o600); err != nil {
-		return Action{}, fmt.Errorf("write live file %s: %w", livePath, err)
+		writeErr := fmt.Errorf("write live file %s: %w", livePath, err)
+		var restoreErr error
+		if liveMissing {
+			restoreErr = os.Remove(livePath)
+			if os.IsNotExist(restoreErr) {
+				restoreErr = nil
+			}
+		} else {
+			restoreErr = os.WriteFile(livePath, liveData, 0o600)
+		}
+		if restoreErr != nil {
+			return Action{}, errors.Join(writeErr, fmt.Errorf("restore failed live file %s: %w", livePath, restoreErr))
+		}
+		return Action{}, writeErr
 	}
-	return Action{Status: status, Source: savedPath, Target: livePath}, nil
+	return Action{Status: status, Source: savedPath, Target: livePath, written: savedData}, nil
+}
+
+// rollbackApply restores files already changed by an unsuccessful apply. Backups
+// remain available for manual recovery if rollback itself fails.
+func rollbackApply(actions []Action, profileDir, backupDir string) error {
+	var result error
+	for i := len(actions) - 1; i >= 0; i-- {
+		action := actions[i]
+		if action.Status == "create" || action.Status == "update" {
+			current, err := os.ReadFile(action.Target)
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("inspect rollback target %s: %w", action.Target, err))
+				continue
+			}
+			if !bytes.Equal(current, action.written) {
+				result = errors.Join(result, fmt.Errorf("rollback conflict: live file %s changed after apply; backup remains at %s", action.Target, backupDir))
+				continue
+			}
+		}
+		switch action.Status {
+		case "create":
+			if err := os.Remove(action.Target); err != nil && !os.IsNotExist(err) {
+				result = errors.Join(result, fmt.Errorf("rollback created file %s: %w", action.Target, err))
+			}
+		case "update":
+			rel, err := filepath.Rel(filepath.Join(profileDir, "files"), action.Source)
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("resolve rollback path for %s: %w", action.Source, err))
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(backupDir, "files", rel))
+			if err == nil {
+				err = os.WriteFile(action.Target, data, 0o600)
+			}
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("rollback live file %s: %w", action.Target, err))
+			}
+		}
+	}
+	return result
 }
 
 func validateSafeApplyFile(file allowlist.File, data []byte) error {

@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -177,6 +179,11 @@ func diffFile(roots paths.LiveRoots, profileDir string, file allowlist.File) ([]
 	keyDiffs := kconfig.Diff(savedDoc, liveDoc)
 	result := make([]Diff, 0, len(keyDiffs))
 	for _, keyDiff := range keyDiffs {
+		oldValue, newValue := keyDiff.OldValue, keyDiff.NewValue
+		if keyDiff.Status == kconfig.DiffChanged && !slices.Equal(keyDiff.OldFlags, keyDiff.NewFlags) {
+			oldValue = fmt.Sprintf("%s (flags: %s)", oldValue, strings.Join(keyDiff.OldFlags, ", "))
+			newValue = fmt.Sprintf("%s (flags: %s)", newValue, strings.Join(keyDiff.NewFlags, ", "))
+		}
 		result = append(result, Diff{
 			Root:     string(file.Root),
 			Path:     file.Path,
@@ -185,9 +192,23 @@ func diffFile(roots paths.LiveRoots, profileDir string, file allowlist.File) ([]
 			Group:    append([]string(nil), keyDiff.Group...),
 			Key:      keyDiff.Name,
 			Locale:   keyDiff.Locale,
-			OldValue: keyDiff.OldValue,
-			NewValue: keyDiff.NewValue,
+			OldValue: oldValue,
+			NewValue: newValue,
 		})
 	}
+	if !maps.Equal(groupFlags(savedDoc), groupFlags(liveDoc)) {
+		base.Status = "changed"
+		result = append(result, base)
+	}
 	return result, nil
+}
+
+func groupFlags(doc *kconfig.Document) map[string]string {
+	flags := make(map[string]string)
+	for _, line := range doc.Lines {
+		if line.Kind == kconfig.LineGroup && len(line.Group.Flags) > 0 {
+			flags[strings.Join(line.Group.Path, "\x00")] = strings.Join(line.Group.Flags, "\x00")
+		}
+	}
+	return flags
 }

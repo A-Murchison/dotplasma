@@ -70,7 +70,7 @@ Useful notes:
 - `apply` restores only manifest-listed files that are also present in the current allowlist.
 - `apply` refuses old or incomplete Plasma Shell layout snapshots that are missing required screen-binding data.
 - `--format json` for `diff` is reserved for future support; use the default text output today.
-- `diff` shows a changed-files summary by default. Add `--verbose` to show per-setting values in vertical detail blocks.
+- `diff` compares settings and shows a changed-files summary by default. Add `--verbose` to see changed settings and their values. Applying a profile restores complete saved files; use `apply --dry-run` to see which files would be overwritten.
 - `diff --color auto` colorizes statuses only when writing to a terminal. Use `always` or `never` to override it.
 
 ## Quick start
@@ -144,11 +144,17 @@ The current built-in allowlist is:
 | `${XDG_CONFIG_HOME:-~/.config}` | `plasmashellrc` | KConfig | Plasma Shell view state, including Plasma 6 panel floating, length, visibility, and thickness settings. |
 | `${XDG_CONFIG_HOME:-~/.config}` | `kscreenlockerrc` | KConfig | Screen locking behavior and appearance. |
 
-Run this to see exactly which tracked files exist on your machine:
+### Live file locations
+
+Live files use `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, defaulting to `~/.config` and `~/.local/share`. Empty or relative values use the defaults. Run `dotplasma inspect-live` to see the resolved paths and tracked files.
+
+**Upgrading with custom XDG paths?** Older versions always used the default live paths. Check `inspect-live` and `apply --dry-run` before saving or restoring. To use the old paths for one command:
 
 ```sh
-dotplasma inspect-live
+XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" dotplasma apply main --out /path/to/output --dry-run
 ```
+
+Use your existing output directory with `--out`: changing `XDG_CONFIG_HOME` also changes the default output location.
 
 ## Common workflows
 
@@ -203,7 +209,17 @@ Apply only after you are comfortable with the planned changes:
 dotplasma apply laptop --out ~/dotplasma-backups
 ```
 
-Existing tracked live files that change are backed up first under `backups/<profile>/<timestamp>/`.
+Changed live files are backed up under `backups/<profile>/<timestamp>/`. If apply fails, dotplasma attempts to undo changes made by that invocation. Rollback can also fail (for example, if the filesystem is unavailable), and interruption may leave a partial restore; inspect the error and backup directory before retrying.
+
+When saving an existing profile, dotplasma removes saved copies of allowlisted files that are no longer present in the live configuration. Use `save --dry-run` to preview removals. Other profile files, such as personal notes, are preserved.
+
+### Save troubleshooting
+
+- **No tracked files found:** run `dotplasma inspect-live` to check the live paths.
+- **Symlink in a profile:** save refuses links inside an existing profile. Replace the link with a regular file or directory, or move it elsewhere, before saving. The error shows its path.
+- **Save interrupted and profile missing:** check `profiles/.dotplasma-save-*/previous` in the output directory. Verify its contents, then move it back to `profiles/<profile>`. Keep the staging directory until recovery is complete.
+
+Avoid saving the same profile simultaneously.
 
 ## Plasma Shell reloads
 

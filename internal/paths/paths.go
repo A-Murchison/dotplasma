@@ -19,10 +19,15 @@ func DefaultLiveRoots() (LiveRoots, error) {
 	if err != nil {
 		return LiveRoots{}, fmt.Errorf("find home directory: %w", err)
 	}
-	return LiveRoots{
-		Config:     filepath.Join(home, ".config"),
-		LocalShare: filepath.Join(home, ".local", "share"),
-	}, nil
+	config := os.Getenv("XDG_CONFIG_HOME")
+	if !filepath.IsAbs(config) {
+		config = filepath.Join(home, ".config")
+	}
+	data := os.Getenv("XDG_DATA_HOME")
+	if !filepath.IsAbs(data) {
+		data = filepath.Join(home, ".local", "share")
+	}
+	return LiveRoots{Config: config, LocalShare: data}, nil
 }
 
 func (r LiveRoots) Root(root allowlist.Root) (string, error) {

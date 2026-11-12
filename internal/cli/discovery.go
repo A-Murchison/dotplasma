@@ -57,6 +57,7 @@ func runInspectLive(stdout io.Writer) error {
 
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(stdout, "Tracked live Plasma files")
+	fmt.Fprintf(stdout, "Config root: %s\nLocal data root: %s\n", roots.Config, roots.LocalShare)
 	fmt.Fprintln(tw, "Root\tPath\tStatus\tRequired\tParser")
 	for _, file := range allowlist.SortedFiles(list.Files) {
 		livePath, err := roots.Join(file.Root, file.Path)

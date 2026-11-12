@@ -38,6 +38,57 @@ func TestDiffLiveReportsKConfigKeyChanges(t *testing.T) {
 	}
 }
 
+func TestDiffLiveReportsNonValueChanges(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, saved, live string }{
+		{name: "key flag", saved: "[General]\nkey=value\n", live: "[General]\nkey[$i]=value\n"},
+		{name: "group flag", saved: "[General]\nkey=value\n", live: "[General][$i]\nkey=value\n"},
+		{name: "group flag and key value", saved: "[General]\nkey=old\n", live: "[General][$i]\nkey=new\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root, out := t.TempDir(), t.TempDir()
+			roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+			path := filepath.Join(root, "kdeglobals")
+			writeFile(t, path, tc.saved)
+			if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots, Now: fixedNow}); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, path, tc.live)
+			result, err := DiffLive(context.Background(), DiffOptions{Profile: "work", Out: out, Roots: roots})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Differences) == 0 {
+				t.Fatal("DiffLive missed change")
+			}
+			if tc.name == "group flag and key value" && len(result.Differences) != 2 {
+				t.Fatalf("differences = %#v, want key and file change", result.Differences)
+			}
+		})
+	}
+}
+
+func TestDiffLiveIgnoresCommentOnlyChanges(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	path := filepath.Join(root, "kdeglobals")
+	writeFile(t, path, "# old\n[General]\nkey=value\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots, Now: fixedNow}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, "# new\n[General]\nkey=value\n")
+	result, err := DiffLive(context.Background(), DiffOptions{Profile: "work", Out: out, Roots: roots})
+	if err != nil || len(result.Differences) != 0 {
+		t.Fatalf("DiffLive = %#v, %v, want no setting differences", result, err)
+	}
+	preview, err := Apply(context.Background(), ApplyOptions{Profile: "work", Out: out, Roots: roots, DryRun: true, Now: fixedNow})
+	if err != nil || !hasActionStatus(preview.Actions, "would-update") {
+		t.Fatalf("Apply preview = %#v, %v, want would-update", preview, err)
+	}
+}
+
 func TestDiffLiveReportsPlasmaShellPanelViewChanges(t *testing.T) {
 	t.Parallel()
 

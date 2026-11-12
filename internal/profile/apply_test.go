@@ -11,6 +11,107 @@ import (
 	"github.com/A-Murchison/dot-plasma/internal/paths"
 )
 
+func TestApplyPreflightRejectsCorruptLaterFile(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=saved\n")
+	writeFile(t, filepath.Join(root, "kwinrc"), "[General]\nvalue=saved\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=live\n")
+	writeFile(t, filepath.Join(out, "profiles", "work", "files", "config", "kwinrc"), "corrupt")
+	if _, err := Apply(context.Background(), ApplyOptions{Profile: "work", Out: out, Roots: roots}); err == nil {
+		t.Fatal("Apply() succeeded with corrupted later file")
+	}
+	if got := readFile(t, filepath.Join(root, "kdeglobals")); got != "[General]\nvalue=live\n" {
+		t.Fatalf("live file changed during preflight: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(out, "backups")); !os.IsNotExist(err) {
+		t.Fatalf("backup created during failed preflight: %v", err)
+	}
+}
+
+func TestApplyRollsBackEarlierFileOnBackupFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		missing bool
+	}{
+		{name: "restore updated file"},
+		{name: "remove created file", missing: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root, out := t.TempDir(), t.TempDir()
+			roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+			first := filepath.Join(root, "kdeglobals")
+			writeFile(t, first, "[General]\nvalue=saved\n")
+			writeFile(t, filepath.Join(root, "kwinrc"), "[General]\nvalue=saved\n")
+			if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots, Now: fixedNow}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.missing {
+				if err := os.Remove(first); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				writeFile(t, first, "[General]\nvalue=live\n")
+			}
+			writeFile(t, filepath.Join(root, "kwinrc"), "[General]\nvalue=live\n")
+			block := filepath.Join(out, "backups", "work", fixedNow().UTC().Format("20060102T150405Z"), "files", "config", "kwinrc")
+			if err := os.MkdirAll(block, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Apply(context.Background(), ApplyOptions{Profile: "work", Out: out, Roots: roots, Now: fixedNow}); err == nil {
+				t.Fatal("Apply succeeded despite blocked backup")
+			}
+			if tc.missing {
+				if _, err := os.Stat(first); !os.IsNotExist(err) {
+					t.Fatalf("created file remains: %v", err)
+				}
+			} else if got := readFile(t, first); got != "[General]\nvalue=live\n" {
+				t.Fatalf("rollback = %q, want original live content", got)
+			}
+		})
+	}
+}
+
+func TestRollbackApplyReportsMissingBackup(t *testing.T) {
+	t.Parallel()
+	profileDir, backupDir := t.TempDir(), t.TempDir()
+	target := filepath.Join(t.TempDir(), "kwinrc")
+	writeFile(t, target, "applied")
+	actions := []Action{{Status: "update", Source: filepath.Join(profileDir, "files", "config", "kwinrc"), Target: target, written: []byte("applied")}}
+	if err := rollbackApply(actions, profileDir, backupDir); err == nil || !strings.Contains(err.Error(), "rollback live file") {
+		t.Fatalf("rollbackApply error = %v, want rollback failure", err)
+	}
+}
+
+func TestRollbackApplyPreservesChangedTargets(t *testing.T) {
+	for _, status := range []string{"create", "update"} {
+		t.Run(status, func(t *testing.T) {
+			profileDir, backupDir := t.TempDir(), t.TempDir()
+			target := filepath.Join(t.TempDir(), "kwinrc")
+			writeFile(t, target, "concurrent edit")
+			backup := filepath.Join(backupDir, "files", "config", "kwinrc")
+			writeFile(t, backup, "original")
+			actions := []Action{{Status: status, Source: filepath.Join(profileDir, "files", "config", "kwinrc"), Target: target, written: []byte("applied")}}
+			err := rollbackApply(actions, profileDir, backupDir)
+			if err == nil || !strings.Contains(err.Error(), "rollback conflict") {
+				t.Fatalf("rollbackApply error = %v, want conflict", err)
+			}
+			if got := readFile(t, target); got != "concurrent edit" {
+				t.Errorf("target = %q", got)
+			}
+			if got := readFile(t, backup); got != "original" {
+				t.Errorf("backup = %q", got)
+			}
+		})
+	}
+}
+
 func TestApplyDryRunDoesNotWriteLiveFilesOrBackups(t *testing.T) {
 	t.Parallel()
 

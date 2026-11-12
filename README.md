@@ -13,7 +13,7 @@
 - **Profile snapshots:** Save your current Plasma configuration into named profiles under `profiles/<name>/`.
 - **Readable diffs:** Compare a saved profile with your live desktop before deciding what to keep.
 - **Safe imports:** Import a profile from another machine without applying it immediately.
-- **Cautious restores:** Preview writes with `--dry-run`; real restores create a backup first.
+- **Cautious restores:** Preview writes with `--dry-run`; real restores back up changed files and attempt rollback on failure.
 - **Git-friendly output:** Profiles are normal files that you can review, copy, commit, or ignore yourself.
 - **Conservative scope:** Only an [allow list](docs/usage.md#what-gets-captured) set of known Plasma configuration files is captured.
 - **No root, no network:** `dotplasma` works in your user account and does not push or sync anything.
@@ -59,7 +59,9 @@ By default, `dotplasma` stores profiles and restore backups under:
 ${XDG_CONFIG_HOME:-~/.config}/dotplasma/
 ```
 
-Use `--out DIR` with supported commands if you want to keep profiles somewhere else.
+Use `--out DIR` to store profiles elsewhere. Live config is read from `XDG_CONFIG_HOME` when it is an absolute path; otherwise it uses `~/.config`.
+
+If you use a custom XDG directory, check `inspect-live` and `apply --dry-run` when upgrading: older versions always used `~/.config`. See the [XDG migration note](docs/usage.md#live-file-locations).
 
 ```sh
 # Check that dotplasma can see your Plasma files and output directory.

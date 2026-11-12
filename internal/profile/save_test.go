@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,15 @@ import (
 
 	"github.com/A-Murchison/dot-plasma/internal/paths"
 )
+
+func TestCopyProfileCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := copyProfile(ctx, t.TempDir(), filepath.Join(t.TempDir(), "copy"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("copyProfile error = %v, want context canceled", err)
+	}
+}
 
 func TestSaveCreatesProfileFiles(t *testing.T) {
 	t.Parallel()
@@ -138,6 +148,45 @@ func TestSaveSecondRunIsStable(t *testing.T) {
 	}
 }
 
+func TestSaveRemovesStaleTrackedFile(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=kept\n")
+	live := filepath.Join(root, "kwinrc")
+	writeFile(t, live, "[General]\nvalue=old\n")
+	opts := SaveOptions{Profile: "work", Out: out, Roots: roots, Now: fixedNow}
+	if _, err := Save(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(live); err != nil {
+		t.Fatal(err)
+	}
+	opts.DryRun = true
+	preview, err := Save(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasActionStatus(preview.Actions, "remove") {
+		t.Fatalf("preview = %#v, want remove", preview.Actions)
+	}
+	saved := filepath.Join(out, "profiles", "work", "files", "config", "kwinrc")
+	if _, err := os.Stat(saved); err != nil {
+		t.Fatalf("dry run removed file: %v", err)
+	}
+	opts.DryRun = false
+	if _, err := Save(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(saved); !os.IsNotExist(err) {
+		t.Fatalf("stale file remains: %v", err)
+	}
+	result, err := DiffLive(context.Background(), DiffOptions{Profile: "work", Out: out, Roots: roots})
+	if err != nil || len(result.Differences) != 0 {
+		t.Fatalf("DiffLive = %#v, %v, want no differences", result, err)
+	}
+}
+
 func TestSaveDoesNotDeleteExistingReadme(t *testing.T) {
 	t.Parallel()
 
@@ -184,6 +233,56 @@ func TestSaveDryRunDoesNotWrite(t *testing.T) {
 	profileDir := filepath.Join(out, "profiles", "work")
 	if _, err := os.Stat(profileDir); !os.IsNotExist(err) {
 		t.Fatalf("dry run created profile dir or unexpected stat error: %v", err)
+	}
+}
+
+func TestSaveFailurePreservesPreviousProfile(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=old\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots}); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(out, "profiles", "work", "manifests", "files.toml")
+	before := readFile(t, manifest)
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=new\n")
+	writeFile(t, filepath.Join(root, "kwinrc"), "[invalid\n")
+	if _, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: roots}); err == nil {
+		t.Fatal("Save() succeeded with invalid live file")
+	}
+	if got := readFile(t, manifest); got != before {
+		t.Fatalf("manifest changed after failed save: got %q want %q", got, before)
+	}
+	if got := readFile(t, filepath.Join(out, "profiles", "work", "files", "config", "kdeglobals")); got != "[General]\nvalue=old\n" {
+		t.Fatalf("saved data changed after failure: %q", got)
+	}
+}
+
+func TestSaveReportsProfileSymlink(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=saved\n")
+	profileDir := filepath.Join(out, "profiles", "work")
+	writeFile(t, filepath.Join(profileDir, "notes.txt"), "notes")
+	link := filepath.Join(profileDir, "link")
+	if err := os.Symlink("notes.txt", link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := Save(context.Background(), SaveOptions{Profile: "work", Out: out, Roots: paths.LiveRoots{Config: root, LocalShare: t.TempDir()}})
+	if err == nil || !strings.Contains(err.Error(), "symlink "+link) {
+		t.Fatalf("Save() error = %v, want symlink and path", err)
+	}
+	if got := readFile(t, filepath.Join(profileDir, "notes.txt")); got != "notes" {
+		t.Fatalf("existing profile changed: %q", got)
+	}
+}
+
+func TestSaveRejectsEmptyCapture(t *testing.T) {
+	t.Parallel()
+	_, err := Save(context.Background(), SaveOptions{Profile: "work", Out: t.TempDir(), Roots: paths.LiveRoots{Config: t.TempDir(), LocalShare: t.TempDir()}})
+	if err == nil || !strings.Contains(err.Error(), "no tracked files") {
+		t.Fatalf("Save() error = %v, want empty capture error", err)
 	}
 }
 

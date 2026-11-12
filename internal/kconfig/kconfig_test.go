@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+func TestDiffAddedAndRemovedFlags(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		old, new string
+		status   DiffStatus
+	}{
+		{name: "added", new: "key[$i]=value\n", status: DiffAdded},
+		{name: "removed", old: "key[$i]=value\n", status: DiffRemoved},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			oldDoc, err := Parse(strings.NewReader(tt.old))
+			if err != nil {
+				t.Fatal(err)
+			}
+			newDoc, err := Parse(strings.NewReader(tt.new))
+			if err != nil {
+				t.Fatal(err)
+			}
+			diffs := Diff(oldDoc, newDoc)
+			if len(diffs) != 1 || diffs[0].Status != tt.status {
+				t.Fatalf("Diff = %+v, want one %s", diffs, tt.status)
+			}
+			flags := diffs[0].NewFlags
+			if tt.status == DiffRemoved {
+				flags = diffs[0].OldFlags
+			}
+			if !slices.Equal(flags, []string{"$i"}) {
+				t.Errorf("flags = %q, want [$i]", flags)
+			}
+		})
+	}
+}
+
 func TestCommittedFixturesParseAndRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -63,6 +96,22 @@ func TestParseRoundTripNestedGroupsLocalesAndFlags(t *testing.T) {
 
 	if got := doc.String(); got != input {
 		t.Fatalf("round trip mismatch\n--- got ---\n%q\n--- want ---\n%q", got, input)
+	}
+}
+
+func TestParseRoundTripEmptyGroupSegment(t *testing.T) {
+	t.Parallel()
+
+	input := "[Tiling][desktop-id][]\npadding=4\n"
+	doc, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if got, want := doc.Lines[0].Group.Path, []string{"Tiling", "desktop-id", ""}; !slices.Equal(got, want) {
+		t.Fatalf("group path = %q, want %q", got, want)
+	}
+	if got := doc.String(); got != input {
+		t.Fatalf("round trip = %q, want %q", got, input)
 	}
 }
 
