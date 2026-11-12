@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/A-Murchison/dotplasma/compare/v1.1.3...v1.1.4) (2026-11-12)
+
+
+### Bug Fixes
+
+* tests ([#9](https://github.com/A-Murchison/dotplasma/issues/9)) ([e5c0007](https://github.com/A-Murchison/dotplasma/commit/e5c0007187e145bdb8b392c9fe790a30d1df3d00))
+
 ## [1.1.3](https://github.com/A-Murchison/dotplasma/compare/v1.1.2...v1.1.3) (2026-11-12)
 
 
