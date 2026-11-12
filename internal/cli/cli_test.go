@@ -425,6 +425,8 @@ func TestRunApplyDryRun(t *testing.T) {
 	configRoot := filepath.Join(home, ".config")
 	localShareRoot := filepath.Join(home, ".local", "share")
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	t.Setenv("XDG_DATA_HOME", localShareRoot)
 	writeCLITestFile(t, filepath.Join(configRoot, "kdeglobals"), "[General]\nColorScheme=Saved\n")
 	_, err := profile.Save(context.Background(), profile.SaveOptions{
 		Profile: "work",
@@ -459,10 +461,11 @@ func TestRunApplyUsesDefaultBackupDirectory(t *testing.T) {
 	home := t.TempDir()
 	configHome := t.TempDir()
 	out := filepath.Join(configHome, "dotplasma")
-	configRoot := filepath.Join(home, ".config")
+	configRoot := configHome
 	localShareRoot := filepath.Join(home, ".local", "share")
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("XDG_DATA_HOME", localShareRoot)
 	writeCLITestFile(t, filepath.Join(configRoot, "kdeglobals"), "[General]\nColorScheme=Saved\n")
 	_, err := profile.Save(context.Background(), profile.SaveOptions{
 		Profile: "work",
@@ -497,6 +500,8 @@ func TestRunApplyDryRunWithPlasmashellReloadPlansReload(t *testing.T) {
 	configRoot := filepath.Join(home, ".config")
 	localShareRoot := filepath.Join(home, ".local", "share")
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	t.Setenv("XDG_DATA_HOME", localShareRoot)
 	writeCLITestFile(t, filepath.Join(configRoot, "kdeglobals"), "[General]\nColorScheme=Saved\n")
 	_, err := profile.Save(context.Background(), profile.SaveOptions{
 		Profile: "work",
