@@ -209,9 +209,9 @@ func Diff(oldDoc, newDoc *Document) []Difference {
 		newEntry, newOK := newEntries[id]
 		switch {
 		case !oldOK && newOK:
-			diffs = append(diffs, Difference{Group: newEntry.Group, Name: newEntry.Name, Locale: newEntry.Locale, NewValue: newEntry.Value, Status: DiffAdded})
+			diffs = append(diffs, Difference{Group: newEntry.Group, Name: newEntry.Name, Locale: newEntry.Locale, NewValue: newEntry.Value, NewFlags: newEntry.Flags, Status: DiffAdded})
 		case oldOK && !newOK:
-			diffs = append(diffs, Difference{Group: oldEntry.Group, Name: oldEntry.Name, Locale: oldEntry.Locale, OldValue: oldEntry.Value, Status: DiffRemoved})
+			diffs = append(diffs, Difference{Group: oldEntry.Group, Name: oldEntry.Name, Locale: oldEntry.Locale, OldValue: oldEntry.Value, OldFlags: oldEntry.Flags, Status: DiffRemoved})
 		case oldOK && newOK && (oldEntry.Value != newEntry.Value || !slices.Equal(oldEntry.Flags, newEntry.Flags)):
 			diffs = append(diffs, Difference{Group: newEntry.Group, Name: newEntry.Name, Locale: newEntry.Locale, OldValue: oldEntry.Value, NewValue: newEntry.Value, OldFlags: oldEntry.Flags, NewFlags: newEntry.Flags, Status: DiffChanged})
 		}

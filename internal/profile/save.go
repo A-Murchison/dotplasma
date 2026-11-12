@@ -67,7 +67,7 @@ func Save(ctx context.Context, opts SaveOptions) (SaveResult, error) {
 	exists := false
 	if _, err := os.Lstat(result.ProfileDir); err == nil {
 		exists = true
-		if err := copyProfile(result.ProfileDir, staged); err != nil {
+		if err := copyProfile(ctx, result.ProfileDir, staged); err != nil {
 			return SaveResult{}, fmt.Errorf("stage existing profile: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
@@ -109,8 +109,11 @@ func Save(ctx context.Context, opts SaveOptions) (SaveResult, error) {
 	return result, nil
 }
 
-func copyProfile(source, target string) error {
+func copyProfile(ctx context.Context, source, target string) error {
 	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("copy profile: %w", err)
+		}
 		if walkErr != nil {
 			return fmt.Errorf("walk %s: %w", path, walkErr)
 		}

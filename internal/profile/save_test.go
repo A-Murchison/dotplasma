@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,15 @@ import (
 
 	"github.com/A-Murchison/dot-plasma/internal/paths"
 )
+
+func TestCopyProfileCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := copyProfile(ctx, t.TempDir(), filepath.Join(t.TempDir(), "copy"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("copyProfile error = %v, want context canceled", err)
+	}
+}
 
 func TestSaveCreatesProfileFiles(t *testing.T) {
 	t.Parallel()

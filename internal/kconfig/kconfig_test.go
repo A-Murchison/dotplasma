@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+func TestDiffAddedAndRemovedFlags(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		old, new string
+		status   DiffStatus
+	}{
+		{name: "added", new: "key[$i]=value\n", status: DiffAdded},
+		{name: "removed", old: "key[$i]=value\n", status: DiffRemoved},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			oldDoc, err := Parse(strings.NewReader(tt.old))
+			if err != nil {
+				t.Fatal(err)
+			}
+			newDoc, err := Parse(strings.NewReader(tt.new))
+			if err != nil {
+				t.Fatal(err)
+			}
+			diffs := Diff(oldDoc, newDoc)
+			if len(diffs) != 1 || diffs[0].Status != tt.status {
+				t.Fatalf("Diff = %+v, want one %s", diffs, tt.status)
+			}
+			flags := diffs[0].NewFlags
+			if tt.status == DiffRemoved {
+				flags = diffs[0].OldFlags
+			}
+			if !slices.Equal(flags, []string{"$i"}) {
+				t.Errorf("flags = %q, want [$i]", flags)
+			}
+		})
+	}
+}
+
 func TestCommittedFixturesParseAndRoundTrip(t *testing.T) {
 	t.Parallel()
 
