@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/A-Murchison/dotplasma/compare/v1.1.2...v1.1.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* add additional security to the backups ([#7](https://github.com/A-Murchison/dotplasma/issues/7)) ([bfa9cc4](https://github.com/A-Murchison/dotplasma/commit/bfa9cc4f04c816c418188d42ea261490d4bd725c))
+
 ## [1.1.2](https://github.com/A-Murchison/dotplasma/compare/v1.1.1...v1.1.2) (2026-10-12)
 
 
