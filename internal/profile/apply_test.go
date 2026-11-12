@@ -81,9 +81,34 @@ func TestApplyRollsBackEarlierFileOnBackupFailure(t *testing.T) {
 func TestRollbackApplyReportsMissingBackup(t *testing.T) {
 	t.Parallel()
 	profileDir, backupDir := t.TempDir(), t.TempDir()
-	actions := []Action{{Status: "update", Source: filepath.Join(profileDir, "files", "config", "kwinrc"), Target: filepath.Join(t.TempDir(), "kwinrc")}}
+	target := filepath.Join(t.TempDir(), "kwinrc")
+	writeFile(t, target, "applied")
+	actions := []Action{{Status: "update", Source: filepath.Join(profileDir, "files", "config", "kwinrc"), Target: target, written: []byte("applied")}}
 	if err := rollbackApply(actions, profileDir, backupDir); err == nil || !strings.Contains(err.Error(), "rollback live file") {
 		t.Fatalf("rollbackApply error = %v, want rollback failure", err)
+	}
+}
+
+func TestRollbackApplyPreservesChangedTargets(t *testing.T) {
+	for _, status := range []string{"create", "update"} {
+		t.Run(status, func(t *testing.T) {
+			profileDir, backupDir := t.TempDir(), t.TempDir()
+			target := filepath.Join(t.TempDir(), "kwinrc")
+			writeFile(t, target, "concurrent edit")
+			backup := filepath.Join(backupDir, "files", "config", "kwinrc")
+			writeFile(t, backup, "original")
+			actions := []Action{{Status: status, Source: filepath.Join(profileDir, "files", "config", "kwinrc"), Target: target, written: []byte("applied")}}
+			err := rollbackApply(actions, profileDir, backupDir)
+			if err == nil || !strings.Contains(err.Error(), "rollback conflict") {
+				t.Fatalf("rollbackApply error = %v, want conflict", err)
+			}
+			if got := readFile(t, target); got != "concurrent edit" {
+				t.Errorf("target = %q", got)
+			}
+			if got := readFile(t, backup); got != "original" {
+				t.Errorf("backup = %q", got)
+			}
+		})
 	}
 }
 

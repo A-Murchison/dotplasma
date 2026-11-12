@@ -35,9 +35,10 @@ type SaveResult struct {
 }
 
 type Action struct {
-	Status string
-	Source string
-	Target string
+	Status  string
+	Source  string
+	Target  string
+	written []byte
 }
 
 // Save stages a complete snapshot before replacing an existing profile.

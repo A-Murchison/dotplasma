@@ -202,7 +202,7 @@ func applyFile(opts ApplyOptions, profileDir, backupDir string, file allowlist.F
 		}
 		return Action{}, writeErr
 	}
-	return Action{Status: status, Source: savedPath, Target: livePath}, nil
+	return Action{Status: status, Source: savedPath, Target: livePath, written: savedData}, nil
 }
 
 // rollbackApply restores files already changed by an unsuccessful apply. Backups
@@ -211,6 +211,17 @@ func rollbackApply(actions []Action, profileDir, backupDir string) error {
 	var result error
 	for i := len(actions) - 1; i >= 0; i-- {
 		action := actions[i]
+		if action.Status == "create" || action.Status == "update" {
+			current, err := os.ReadFile(action.Target)
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("inspect rollback target %s: %w", action.Target, err))
+				continue
+			}
+			if !bytes.Equal(current, action.written) {
+				result = errors.Join(result, fmt.Errorf("rollback conflict: live file %s changed after apply; backup remains at %s", action.Target, backupDir))
+				continue
+			}
+		}
 		switch action.Status {
 		case "create":
 			if err := os.Remove(action.Target); err != nil && !os.IsNotExist(err) {
