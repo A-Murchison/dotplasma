@@ -138,6 +138,45 @@ func TestSaveSecondRunIsStable(t *testing.T) {
 	}
 }
 
+func TestSaveRemovesStaleTrackedFile(t *testing.T) {
+	t.Parallel()
+	root, out := t.TempDir(), t.TempDir()
+	roots := paths.LiveRoots{Config: root, LocalShare: t.TempDir()}
+	writeFile(t, filepath.Join(root, "kdeglobals"), "[General]\nvalue=kept\n")
+	live := filepath.Join(root, "kwinrc")
+	writeFile(t, live, "[General]\nvalue=old\n")
+	opts := SaveOptions{Profile: "work", Out: out, Roots: roots, Now: fixedNow}
+	if _, err := Save(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(live); err != nil {
+		t.Fatal(err)
+	}
+	opts.DryRun = true
+	preview, err := Save(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasActionStatus(preview.Actions, "remove") {
+		t.Fatalf("preview = %#v, want remove", preview.Actions)
+	}
+	saved := filepath.Join(out, "profiles", "work", "files", "config", "kwinrc")
+	if _, err := os.Stat(saved); err != nil {
+		t.Fatalf("dry run removed file: %v", err)
+	}
+	opts.DryRun = false
+	if _, err := Save(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(saved); !os.IsNotExist(err) {
+		t.Fatalf("stale file remains: %v", err)
+	}
+	result, err := DiffLive(context.Background(), DiffOptions{Profile: "work", Out: out, Roots: roots})
+	if err != nil || len(result.Differences) != 0 {
+		t.Fatalf("DiffLive = %#v, %v, want no differences", result, err)
+	}
+}
+
 func TestSaveDoesNotDeleteExistingReadme(t *testing.T) {
 	t.Parallel()
 

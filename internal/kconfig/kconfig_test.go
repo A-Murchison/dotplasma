@@ -66,6 +66,22 @@ func TestParseRoundTripNestedGroupsLocalesAndFlags(t *testing.T) {
 	}
 }
 
+func TestParseRoundTripEmptyGroupSegment(t *testing.T) {
+	t.Parallel()
+
+	input := "[Tiling][desktop-id][]\npadding=4\n"
+	doc, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if got, want := doc.Lines[0].Group.Path, []string{"Tiling", "desktop-id", ""}; !slices.Equal(got, want) {
+		t.Fatalf("group path = %q, want %q", got, want)
+	}
+	if got := doc.String(); got != input {
+		t.Fatalf("round trip = %q, want %q", got, input)
+	}
+}
+
 func TestEntriesDuplicateKeyLastValueWins(t *testing.T) {
 	t.Parallel()
 

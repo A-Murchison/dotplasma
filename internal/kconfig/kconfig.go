@@ -4,6 +4,7 @@ package kconfig
 import (
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -34,6 +35,7 @@ type Line struct {
 }
 
 // Group is a KConfig group header, such as [Containments][1][Applets][2][$i].
+// Path segments may be empty; KWin uses them in tiling configuration groups.
 type Group struct {
 	Path  []string
 	Flags []string
@@ -64,6 +66,8 @@ type Difference struct {
 	Locale   string
 	OldValue string
 	NewValue string
+	OldFlags []string
+	NewFlags []string
 	Status   DiffStatus
 }
 
@@ -208,8 +212,8 @@ func Diff(oldDoc, newDoc *Document) []Difference {
 			diffs = append(diffs, Difference{Group: newEntry.Group, Name: newEntry.Name, Locale: newEntry.Locale, NewValue: newEntry.Value, Status: DiffAdded})
 		case oldOK && !newOK:
 			diffs = append(diffs, Difference{Group: oldEntry.Group, Name: oldEntry.Name, Locale: oldEntry.Locale, OldValue: oldEntry.Value, Status: DiffRemoved})
-		case oldOK && newOK && oldEntry.Value != newEntry.Value:
-			diffs = append(diffs, Difference{Group: newEntry.Group, Name: newEntry.Name, Locale: newEntry.Locale, OldValue: oldEntry.Value, NewValue: newEntry.Value, Status: DiffChanged})
+		case oldOK && newOK && (oldEntry.Value != newEntry.Value || !slices.Equal(oldEntry.Flags, newEntry.Flags)):
+			diffs = append(diffs, Difference{Group: newEntry.Group, Name: newEntry.Name, Locale: newEntry.Locale, OldValue: oldEntry.Value, NewValue: newEntry.Value, OldFlags: oldEntry.Flags, NewFlags: newEntry.Flags, Status: DiffChanged})
 		}
 	}
 	return diffs
@@ -237,9 +241,6 @@ func parseGroup(s string) (Group, error) {
 		if strings.HasPrefix(token, "$") {
 			group.Flags = append(group.Flags, token)
 			continue
-		}
-		if token == "" {
-			return Group{}, fmt.Errorf("empty group segment")
 		}
 		group.Path = append(group.Path, token)
 	}
@@ -344,5 +345,9 @@ func formatKey(key Key) string {
 }
 
 func entryID(group []string, name, locale string) string {
-	return strings.Join(group, "\x00") + "\x01" + name + "\x01" + locale
+	path := strings.Join(group, "\x00")
+	if len(group) > 0 {
+		path += "\x00"
+	}
+	return path + "\x01" + name + "\x01" + locale
 }

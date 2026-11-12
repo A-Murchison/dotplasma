@@ -3,6 +3,7 @@ package profile
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,15 +114,12 @@ func Apply(ctx context.Context, opts ApplyOptions) (ApplyResult, error) {
 
 	for _, item := range manifest {
 		if err := ctx.Err(); err != nil {
-			return ApplyResult{}, fmt.Errorf("apply profile: %w", err)
+			return ApplyResult{}, errors.Join(fmt.Errorf("apply profile: %w", err), rollbackApply(result.Actions, profileDir, backupDir))
 		}
-		file, ok := allowlisted[item.Root+":"+item.Path]
-		if !ok {
-			return ApplyResult{}, fmt.Errorf("profile file %s/%s is not in the current allowlist", item.Root, item.Path)
-		}
+		file := allowlisted[item.Root+":"+item.Path]
 		action, err := applyFile(opts, profileDir, backupDir, file, item)
 		if err != nil {
-			return ApplyResult{}, err
+			return ApplyResult{}, errors.Join(err, rollbackApply(result.Actions, profileDir, backupDir))
 		}
 		result.Actions = append(result.Actions, action)
 	}
@@ -189,9 +187,51 @@ func applyFile(opts ApplyOptions, profileDir, backupDir string, file allowlist.F
 		return Action{}, fmt.Errorf("create live directory %s: %w", filepath.Dir(livePath), err)
 	}
 	if err := os.WriteFile(livePath, savedData, 0o600); err != nil {
-		return Action{}, fmt.Errorf("write live file %s: %w", livePath, err)
+		writeErr := fmt.Errorf("write live file %s: %w", livePath, err)
+		var restoreErr error
+		if liveMissing {
+			restoreErr = os.Remove(livePath)
+			if os.IsNotExist(restoreErr) {
+				restoreErr = nil
+			}
+		} else {
+			restoreErr = os.WriteFile(livePath, liveData, 0o600)
+		}
+		if restoreErr != nil {
+			return Action{}, errors.Join(writeErr, fmt.Errorf("restore failed live file %s: %w", livePath, restoreErr))
+		}
+		return Action{}, writeErr
 	}
 	return Action{Status: status, Source: savedPath, Target: livePath}, nil
+}
+
+// rollbackApply restores files already changed by an unsuccessful apply. Backups
+// remain available for manual recovery if rollback itself fails.
+func rollbackApply(actions []Action, profileDir, backupDir string) error {
+	var result error
+	for i := len(actions) - 1; i >= 0; i-- {
+		action := actions[i]
+		switch action.Status {
+		case "create":
+			if err := os.Remove(action.Target); err != nil && !os.IsNotExist(err) {
+				result = errors.Join(result, fmt.Errorf("rollback created file %s: %w", action.Target, err))
+			}
+		case "update":
+			rel, err := filepath.Rel(filepath.Join(profileDir, "files"), action.Source)
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("resolve rollback path for %s: %w", action.Source, err))
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(backupDir, "files", rel))
+			if err == nil {
+				err = os.WriteFile(action.Target, data, 0o600)
+			}
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("rollback live file %s: %w", action.Target, err))
+			}
+		}
+	}
+	return result
 }
 
 func validateSafeApplyFile(file allowlist.File, data []byte) error {

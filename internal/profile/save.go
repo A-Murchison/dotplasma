@@ -215,7 +215,18 @@ func saveFile(opts SaveOptions, profileDir string, file allowlist.File) (Action,
 	data, err := os.ReadFile(livePath)
 	if err != nil {
 		if os.IsNotExist(err) && !file.Required {
-			return Action{Status: "missing", Source: livePath, Target: targetPath}, nil, nil
+			status := "missing"
+			if _, statErr := os.Lstat(targetPath); statErr == nil {
+				status = "remove"
+				if !opts.DryRun {
+					if err := os.Remove(targetPath); err != nil {
+						return Action{}, nil, fmt.Errorf("remove stale saved file %s: %w", targetPath, err)
+					}
+				}
+			} else if !os.IsNotExist(statErr) {
+				return Action{}, nil, fmt.Errorf("inspect saved file %s: %w", targetPath, statErr)
+			}
+			return Action{Status: status, Source: livePath, Target: targetPath}, nil, nil
 		}
 		return Action{}, nil, fmt.Errorf("read live file %s: %w", livePath, err)
 	}

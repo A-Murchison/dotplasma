@@ -70,7 +70,7 @@ Useful notes:
 - `apply` restores only manifest-listed files that are also present in the current allowlist.
 - `apply` refuses old or incomplete Plasma Shell layout snapshots that are missing required screen-binding data.
 - `--format json` for `diff` is reserved for future support; use the default text output today.
-- `diff` shows a changed-files summary by default. Add `--verbose` to show per-setting values in vertical detail blocks.
+- `diff` compares settings and shows a changed-files summary by default. Add `--verbose` to see changed settings and their values. Applying a profile restores complete saved files; use `apply --dry-run` to see which files would be overwritten.
 - `diff --color auto` colorizes statuses only when writing to a terminal. Use `always` or `never` to override it.
 
 ## Quick start
@@ -209,7 +209,9 @@ Apply only after you are comfortable with the planned changes:
 dotplasma apply laptop --out ~/dotplasma-backups
 ```
 
-Changed live files are backed up under `backups/<profile>/<timestamp>/`. A filesystem error can leave a partial restore; check the backup directory if apply fails.
+Changed live files are backed up under `backups/<profile>/<timestamp>/`. If apply fails, dotplasma attempts to undo changes made by that invocation. Rollback can also fail (for example, if the filesystem is unavailable), and interruption may leave a partial restore; inspect the error and backup directory before retrying.
+
+When saving an existing profile, dotplasma removes saved copies of allowlisted files that are no longer present in the live configuration. Use `save --dry-run` to preview removals. Other profile files, such as personal notes, are preserved.
 
 ### Save troubleshooting
 
